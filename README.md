@@ -7,4 +7,4 @@ The file `single_agent_env.py` contains the basic code to load an environment, f
 
 The `Q_learning_Sarsa_single_agent.ipynb` file implements a single agent environment as well as both **Q Learning** and **Sarsa** algorithms.
 
-The `multi-agent-FrozenLake.ipynb` file implements a custom 2-agents version of open AI's FrozenLake game. It includes a **Central Q Learning** algortihm as well as a visual render of the game.
+The `multi-agent-FrozenLake.ipynb` file implements a custom 2-agents version of open AI's FrozenLake game. It includes a **Central Q Learning** algortihm as well as a visual render of the game. In the `main` method, we can select the number of agents, the size of the grid, the seed for the random map generation, as well as predefined maps and other parameters.
