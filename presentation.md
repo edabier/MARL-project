@@ -18,7 +18,7 @@ Then at the end of the game, we can sum all the rewards cumulated by the agent t
 
 In the example of FrozenLake, the principle is that the agent is moving on ice blocks, which means that they can be slippery and thus lead to uncertainty in the new state of the agent. The agent can decide to go down, but it slips and finds itself on the block to its right. Using this example we can see that the reward obtained by the agent when taking a certain action is **not certain**, if we knew exactly where it would land, then we would know the exact value of its reward, but since it’s uncertain, we can also approximate the **expected reward**.
 
-With this reward function, we can define a function name **value function** that will inform the agent on its expected return (the expectation of its reward, because rewards can be stochastic) for its state s and when following a **policy** $$\pi$$, and this function can later be used to make the agent learn what actions to take.
+With this reward function, we can define a function name **value function** that will inform the agent on its expected return (the expectation of its reward, because rewards can be stochastic) for its state s and when following a **policy $$\pi$$**, and this function can later be used to make the agent learn what actions to take.
 
 So to recap, we want the agent to learn what to do in a given situation (we call this the **policy** of the agent), and it learns it based on a reward function.
 
