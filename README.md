@@ -5,6 +5,6 @@ In this repository, we will explore various RL methods (**single agent** algorit
 
 The file `single_agent_env.py` contains the basic code to load an environment, find the best policy using a **Value Iteration** algorithm and then simulate the best policy to visualize it.
 
-The `multi-agent-FrozenLake.ipynb` file implements a custom 2-agents version of open AI's FrozenLake game. It includes a **Central Q Learning** algortihm as well as a visual render of the game.
-
 The `Q_learning_Sarsa_single_agent.ipynb` file implements a single agent environment as well as both **Q Learning** and **Sarsa** algorithms.
+
+The `multi-agent-FrozenLake.ipynb` file implements a custom 2-agents version of open AI's FrozenLake game. It includes a **Central Q Learning** algortihm as well as a visual render of the game.
