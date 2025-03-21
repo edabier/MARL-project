@@ -7,8 +7,10 @@ We have an agent, inside an environment that it can interact with, and the goal 
 For example, in frozen lake, the agent can move around (we call that an **action**) in an environment that is made of holes, ice paths, and a destination spot, and the goal is to have the agent reach the end.
 
 With this simple example, we can observe a central property in RL which is the **markovianity** of the action chain. The probability of the agent being in a new state and receiving some reward only depends on its previous state and what action it takes, but not all the previous actions.
+We need this property so that taking an action will only need to have the previous state/ action and not the full history which simplify the computations
 
-- how do we teach the agent what is a good or a bad decision?
+how do we teach the agent what is a good or a bad decision?
+
 We use **reward functions**: depending on what the agent does on a given state (if it is at a pivot spot, next to a hole, a blank ice path, and at the end of the game for example) his action will have a strong impact on the outcome and we can design a function rewarding it or punishing it if its action has a positive impact on the objective.
 
 Now that an agent knows what is a good or a bad action, we can let it interact with its environment. But we have to set limits, otherwise it would last forever. So we consider **final states**, that if the agent reaches them, the game is over, as well as **maximum time steps** (that time limit) that if the agent doesn’t reach the objective within this amount of time steps, the game is over. 
