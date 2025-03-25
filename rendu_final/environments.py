@@ -10,6 +10,445 @@ from collections import defaultdict
 import os
 import colorsys
 
+# Define custom maps for testing purposes
+MAPS = {
+    "4x4": [
+        "SFFF",
+        "FHHS",
+        "FFFH",
+        "HFFG"
+    ],
+    "5x5": [
+        "SFFFH",
+        "HFFHF",
+        "FFFFH",
+        "HFHFF",
+        "SFHFG"
+    ],
+    "6x6": [
+        "SFFFHF",
+        "HFFHFF",
+        "FFHFHF",
+        "HFFFHH",
+        "FFHFHF",
+        "SFFFFG"
+    ],
+    "7x7": [
+        "SFFFFFH",
+        "HFFHFHF",
+        "FFHFFFH",
+        "HFFFHFF",
+        "FHFHFHF",
+        "HFFHFHS",
+        "GFFFFFH"
+    ],
+    "8x8": [
+        "SFFFFFFF",
+        "FFFFFFFF",
+        "FFFHFFFF",
+        "FFFFFHFF",
+        "FFFHFFFF",
+        "SHHFFFHF",
+        "FHFFHFHF",
+        "FFFHFFFG"
+    ],
+}
+
+def createMap(num_agent, size, map_name=None, seed=None):
+    """
+    Generate a random FrozenLake map with a feasible path for each agent to the goal.
+
+    Args:
+        num_agent (int): Number of agents (starting positions).
+        size (int): Grid size (size x size).
+        seed (int): Random seed for reproducibility.
+
+    Returns:
+        list: A list of strings representing the generated map.
+    """
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed)
+    
+    if map_name is not None:
+        return MAPS[map_name]
+    
+    # Define elements
+    FLOOR, HOLE, START, GOAL = 'F', 'H', 'S', 'G'
+    
+    # Step 1: Create an empty grid filled with 'F' (frozen floor)
+    grid = np.full((size, size), FLOOR)
+
+    # Step 2: Place the goal randomly
+    goal_pos = (random.randint(0, size - 1), random.randint(0, size - 1))
+    grid[goal_pos] = GOAL
+
+    # Step 3: Randomly place start positions, ensuring they are unique and not on the goal
+    start_positions = set()
+    while len(start_positions) < num_agent:
+        start_pos = (random.randint(0, size - 1), random.randint(0, size - 1))
+        if start_pos != goal_pos:
+            start_positions.add(start_pos)
+
+    for start_pos in start_positions:
+        grid[start_pos] = START
+
+    # Step 4: Randomly place holes
+    num_holes = max(1, int(0.2 * size * size))  # 20% of the grid is holes
+    hole_positions = set()
+    
+    while len(hole_positions) < num_holes:
+        hole_pos = (random.randint(0, size - 1), random.randint(0, size - 1))
+        if hole_pos != goal_pos and hole_pos not in start_positions:
+            hole_positions.add(hole_pos)
+    
+    for hole_pos in hole_positions:
+        grid[hole_pos] = HOLE
+
+    # Step 5: Check if all agents can reach the goal
+    def is_path_exists(start, goal, grid):
+        """Check if there's a valid path using BFS."""
+        rows, cols = grid.shape
+        queue = [start]
+        visited = set()
+
+        while queue:
+            x, y = queue.pop(0)
+            if (x, y) == goal:
+                return True
+            visited.add((x, y))
+
+            # Possible moves (Left, Down, Right, Up)
+            for dx, dy in [(-1, 0), (0, 1), (1, 0), (0, -1)]:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < rows and 0 <= ny < cols and (nx, ny) not in visited:
+                    if grid[nx, ny] != HOLE:
+                        queue.append((nx, ny))
+
+        return False
+
+    # Ensure every agent can reach the goal
+    for start in start_positions:
+        if not is_path_exists(start, goal_pos, grid):
+            return createMap(num_agent, size, seed + 1 if seed is not None else None)  # Retry with a different seed
+
+    # Convert to list of strings
+    return ["".join(row) for row in grid]
+
+class FrozenLakeOneGoal(gym.Env):
+    def __init__(self, map_, max_steps=100, num_agents=2):
+        # Load the map
+        self.desc = np.asarray(map_, dtype='c')
+        self.nrow, self.ncol = self.desc.shape
+        self.original_desc = self.desc.copy()  # Keep original for reference
+        self.num_agents = num_agents
+        
+        # Define action and observation spaces
+        # Create a tuple of Discrete(4) for each agent
+        self.action_space = spaces.Tuple(tuple(spaces.Discrete(4) for _ in range(num_agents)))
+        
+        # State space: (agent1_row, agent1_col, agent2_row, agent2_col, ..., agentN_row, agentN_col)
+        # Create a tuple of Discrete spaces for each agent's position
+        self.observation_space = spaces.Tuple(
+            tuple(spaces.Discrete(self.nrow) for _ in range(num_agents)) +  # rows
+            tuple(spaces.Discrete(self.ncol) for _ in range(num_agents))    # columns
+        )
+        
+        self.max_steps = max_steps 
+        self.np_random = np.random.RandomState()
+        
+        # Need to import colorsys for agent color generation
+        import colorsys
+        self.colorsys = colorsys
+        
+        self.reset()
+        
+    def reset(self, seed=None):
+        if seed is not None:
+            self.np_random = np.random.RandomState(seed)
+        
+        self.desc = self.original_desc.copy()
+        start_positions = np.argwhere(self.desc == b'S')
+        goal_positions = np.argwhere(self.desc == b'G')
+        
+        # Initialize agent positions
+        self.agent_positions = []
+        
+        # If we have enough start positions for all agents
+        if len(start_positions) >= self.num_agents:
+            for i in range(self.num_agents):
+                self.agent_positions.append(start_positions[i % len(start_positions)])
+        else:
+            # If not enough start positions, place all agents at the first start position
+            for i in range(self.num_agents):
+                self.agent_positions.append(start_positions[0].copy())
+        
+        # Initialize goal positions
+        if len(goal_positions) > 0:
+            self.goal_pos = goal_positions[0]  # Use the first goal for simplicity
+        else:
+            raise ValueError("No goal position found on the map")
+        
+        self.steps = 0
+        self.agents_goal_steps = [None] * self.num_agents
+        
+        # Flatten the state: [agent1_row, agent1_col, agent2_row, agent2_col, ...]
+        self.state = tuple(pos for agent_pos in self.agent_positions for pos in agent_pos)
+        
+        # Initialize last actions for all agents (default to UP)
+        self.last_actions = [3] * self.num_agents
+        
+        return self.state, {}
+    
+    def step(self, actions):
+        self.steps += 1
+        
+        # Ensure actions is a list or tuple with the right length
+        if isinstance(actions, (int, np.integer)):  # Handle single agent case
+            actions = [actions]
+        elif not isinstance(actions, (list, tuple, np.ndarray)) or len(actions) != self.num_agents:
+            raise ValueError(f"Expected actions to be a list/tuple of length {self.num_agents}, got {actions}")
+        
+        # Store last actions for rendering
+        self.last_actions = list(actions)
+        
+        # On first step, convert all 'S' to 'F' after agents have moved
+        if self.steps == 1:
+            start_positions = np.argwhere(self.desc == b'S')
+            for pos in start_positions:
+                self.desc[pos[0], pos[1]] = b'F'
+        
+        # Move all agents
+        for i, action in enumerate(actions):
+            if i < len(self.agent_positions):  # Ensure we don't go out of bounds
+                self.agent_positions[i] = self._move_agent(self.agent_positions[i], action)
+        
+        # Check if agents have reached goals
+        dones = []
+        for i, agent_pos in enumerate(self.agent_positions):
+            done = np.array_equal(agent_pos, self.goal_pos)
+            dones.append(done)
+            if done and self.agents_goal_steps[i] is None:
+                self.agents_goal_steps[i] = self.steps
+        
+        # Update state
+        self.state = tuple(pos for agent_pos in self.agent_positions for pos in agent_pos)
+        
+        # Check if any agent has fallen into a hole
+        fallen_agents = []
+        for i, agent_pos in enumerate(self.agent_positions):
+            if self.desc[agent_pos[0], agent_pos[1]] == b'H':
+                fallen_agents.append(i)
+        
+        # Determine overall done condition
+        done = (all(dones) or self.steps >= self.max_steps or len(fallen_agents) > 0)
+        
+        # Calculate reward
+        if len(fallen_agents) > 0:
+            reward = -5.0  # Immediate failure if any agent falls
+        elif all(dones):
+            # Check if all agents reached the goal at the same time
+            goal_steps = [step for step in self.agents_goal_steps if step is not None]
+            if len(goal_steps) == self.num_agents and len(set(goal_steps)) == 1:
+                reward = 1.0  # Full reward if they all arrive together
+            else:
+                reward = 0.5  # Partial reward if they arrive at different times
+        elif any(dones):
+            reward = -0.2  # Penalize reaching the goal alone
+        else:
+            reward = -0.001  # Small penalty to encourage movement
+        
+        truncated = self.steps >= self.max_steps
+        
+        return self.state, reward, done, truncated, {}
+    
+    def _move_agent(self, position, action):
+        # Get new position
+        new_position = position.copy()
+        
+        # 0: LEFT, 1: DOWN, 2: RIGHT, 3: UP
+        if action == 0:  # LEFT
+            new_position[1] = max(0, position[1] - 1)
+        elif action == 1:  # DOWN
+            new_position[0] = min(self.nrow - 1, position[0] + 1)
+        elif action == 2:  # RIGHT
+            new_position[1] = min(self.ncol - 1, position[1] + 1)
+        elif action == 3:  # UP
+            new_position[0] = max(0, position[0] - 1)
+        
+        # Check if new position is a hole or valid
+        if self.desc[new_position[0], new_position[1]] != b'H':
+            return new_position
+        else:
+            # If it's a hole, agent falls in
+            return new_position
+
+    def render_pygame(self, screen_size=400):
+        """Render the environment using pygame with the original gym images"""
+        # Initialize pygame if not already done
+        if not hasattr(self, 'pygame_initialized') or not self.pygame_initialized:
+            pygame.init()
+            self.pygame_initialized = True
+            self.screen = pygame.display.set_mode((screen_size, screen_size))
+            pygame.display.set_caption(f"Multi-Agent Frozen Lake ({self.num_agents} agents)")
+            self.cell_size = screen_size // max(self.nrow, self.ncol)
+            self.running = True  # Flag to control pygame loop
+            
+            # Load images from gym repository
+            img_dir = "img/"
+            self.images = {
+                'F': pygame.image.load(img_dir + "ice.png"),
+                'H': pygame.image.load(img_dir + "hole.png"),
+                'G': pygame.image.load(img_dir + "ice.png"),  # Use ice as background for goal
+                'S': pygame.image.load(img_dir + "stool.png")
+            }
+            
+            # Load goal sprite separately to overlay on ice
+            self.goal_sprite = pygame.image.load(img_dir + "goal.png")
+            self.goal_sprite = pygame.transform.scale(self.goal_sprite, (self.cell_size, self.cell_size))
+            
+            # Load agent images for different directions
+            self.agent_images = {
+                'up': pygame.image.load(img_dir + "elf_up.png"),
+                'down': pygame.image.load(img_dir + "elf_down.png"),
+                'left': pygame.image.load(img_dir + "elf_left.png"),
+                'right': pygame.image.load(img_dir + "elf_right.png")
+            }
+            
+            # Resize images to fit the cell size
+            for key in self.images:
+                self.images[key] = pygame.transform.scale(self.images[key], (self.cell_size, self.cell_size))
+            
+            for key in self.agent_images:
+                self.agent_images[key] = pygame.transform.scale(self.agent_images[key], (self.cell_size, self.cell_size))
+            
+            # Create red-tinted version for collision
+            self.collision_images = {}
+            
+            for key, img in self.agent_images.items():
+                # Create red-tinted version for collision
+                self.collision_images[key] = img.copy()
+                red_surface = pygame.Surface(img.get_size(), pygame.SRCALPHA)
+                red_surface.fill((255, 0, 0, 100))  # Red tint
+                self.collision_images[key].blit(red_surface, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+            
+            # Define agent indicator colors - generate a unique color for each agent
+            self.agent_colors = []
+            for i in range(self.num_agents):
+                # Generate a unique color based on the agent index
+                hue = i / max(1, self.num_agents)
+                rgb = self.colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+                self.agent_colors.append((int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255)))
+        
+        # Don't render if pygame has been closed
+        if not hasattr(self, 'running') or not self.running:
+            return
+        
+        # Clear screen
+        self.screen.fill((0, 0, 0))
+        
+        # Draw grid
+        for i in range(self.nrow):
+            for j in range(self.ncol):
+                tile_char = self.desc[i, j].decode('utf-8')
+                rect = pygame.Rect(j * self.cell_size, i * self.cell_size,
+                                self.cell_size, self.cell_size)
+                # Draw tile
+                self.screen.blit(self.images[tile_char], rect)
+                
+                # Overlay goal sprite on ice if this is the goal position
+                if tile_char == 'G':
+                    self.screen.blit(self.goal_sprite, rect)
+        
+        # Draw grid lines
+        grid_color = (50, 50, 50)  # Dark gray
+        for i in range(self.nrow + 1):
+            pygame.draw.line(self.screen, grid_color, 
+                            (0, i * self.cell_size), 
+                            (self.ncol * self.cell_size, i * self.cell_size), 2)
+        for j in range(self.ncol + 1):
+            pygame.draw.line(self.screen, grid_color, 
+                            (j * self.cell_size, 0), 
+                            (j * self.cell_size, self.nrow * self.cell_size), 2)
+        
+        # Map actions to directions for agent images
+        direction_map = {0: 'left', 1: 'down', 2: 'right', 3: 'up'}
+        
+        # Check for collisions (where 2 or more agents occupy the same cell)
+        # Create a dictionary to track cell occupancy
+        cell_occupancy = {}
+        for i, agent_pos in enumerate(self.agent_positions):
+            pos_tuple = tuple(agent_pos)
+            if pos_tuple in cell_occupancy:
+                cell_occupancy[pos_tuple].append(i)
+            else:
+                cell_occupancy[pos_tuple] = [i]
+        
+        # Draw agents
+        for i, agent_pos in enumerate(self.agent_positions):
+            pos_tuple = tuple(agent_pos)
+            agent_rect = pygame.Rect(agent_pos[1] * self.cell_size, 
+                                   agent_pos[0] * self.cell_size,
+                                   self.cell_size, self.cell_size)
+            
+            # Make sure we have a valid action index
+            action_idx = min(self.last_actions[i], 3) if i < len(self.last_actions) else 3
+            
+            # Check if this agent is colliding with others
+            is_collision = len(cell_occupancy[pos_tuple]) > 1
+            
+            if is_collision:
+                # Use red-tinted image for collisions
+                collision_img = self.collision_images[direction_map[action_idx]]
+                self.screen.blit(collision_img, agent_rect)
+                
+                # Draw indicators for all colliding agents
+                colliding_agents = cell_occupancy[pos_tuple]
+                for idx, colliding_agent_idx in enumerate(colliding_agents):
+                    # Position indicators at different corners
+                    indicator_size = max(4, int(self.cell_size / 8))
+                    
+                    # Calculate position based on index (up to 4 agents per cell)
+                    corner_idx = idx % 4
+                    if corner_idx == 0:  # Top-left
+                        pos = (agent_rect.left + indicator_size, agent_rect.top + indicator_size)
+                    elif corner_idx == 1:  # Top-right
+                        pos = (agent_rect.right - indicator_size, agent_rect.top + indicator_size)
+                    elif corner_idx == 2:  # Bottom-left
+                        pos = (agent_rect.left + indicator_size, agent_rect.bottom - indicator_size)
+                    else:  # Bottom-right
+                        pos = (agent_rect.right - indicator_size, agent_rect.bottom - indicator_size)
+                    
+                    # Draw the indicator
+                    if colliding_agent_idx < len(self.agent_colors):
+                        pygame.draw.circle(self.screen, self.agent_colors[colliding_agent_idx], pos, indicator_size)
+            else:
+                # Draw agent normally
+                agent_img = self.agent_images[direction_map[action_idx]]
+                self.screen.blit(agent_img, agent_rect)
+                
+                # Draw a small indicator for agent identification
+                indicator_size = max(4, int(self.cell_size / 8))
+                pygame.draw.circle(self.screen, self.agent_colors[i], 
+                                (agent_rect.left + indicator_size, agent_rect.top + indicator_size), 
+                                indicator_size)
+        
+        # Update display
+        pygame.display.flip()
+        
+        # Process events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+                pygame.quit()
+                return
+            
+    def close(self):
+        """Properly close the pygame window"""
+        if hasattr(self, 'pygame_initialized') and self.pygame_initialized:
+            self.running = False
+            pygame.quit()
+            self.pygame_initialized = False      
 
 class FrozenLake4goals(gym.Env):
     """
