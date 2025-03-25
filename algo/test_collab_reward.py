@@ -229,7 +229,7 @@ def list_saved_agents(save_dir="saved_agents"):
 
 
 if __name__ == "__main__":
-    n_agents=20
+    n_agents=10
     Iql_status=False
     iql_save=True
     alt_iql_status=True
@@ -297,13 +297,13 @@ if __name__ == "__main__":
         alt_agent, alt_results = test_alternating_learning(
             env, n_agents=n_agents,
             base_learning_rate=0.4,
-            max_episodes=100000,
+            max_episodes=150000,
             discount_factor=0.99,
             exploration_rate=1.0,
             min_exploration_rate=0.05,
             exploration_decay=0.99997,
-            alternating_period=1000,
-            learning_rate_ratio=0.,
+            alternating_period=500,
+            learning_rate_ratio=0.1,
             window_size=200
         )
         if alt_iql_save:
