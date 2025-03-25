@@ -625,3 +625,79 @@ class AlternatingIQL:
         }
 
 
+class RandomPolicy:
+    
+    '''
+    This class creates a random policy in order to perform comparisons 
+    with more complex policies
+    '''
+    
+    def __init__(self, action_size=4):
+        self.action_size = action_size
+    
+    def select_action(self, state):
+        action1 = np.random.randint(0, self.action_size)
+        action2 = np.random.randint(0, self.action_size)
+        return (action1, action2)
+    
+class SingleGoalCentralQLearning:
+    
+    '''
+    This class defines the central Q learning algorithm
+    To be used on the OneGoalMultiAgentFrozenLake env
+    '''
+    
+    def __init__(self, state_size, action_size, num_agents=2, learning_rate=0.1, discount_factor=0.99, 
+                 exploration_rate=1.0, exploration_decay=0.995, min_exploration_rate=0.01):
+        # Add num_agents as a parameter
+        self.num_agents = num_agents
+        self.action_size = action_size
+        self.lr = learning_rate
+        self.gamma = discount_factor
+        self.epsilon = exploration_rate
+        self.epsilon_decay = exploration_decay
+        self.epsilon_min = min_exploration_rate
+        
+        # Create a joint Q-table that can handle any number of agents
+        # We'll use a dictionary for states and a numpy array for joint actions
+        self.q_table = defaultdict(lambda: np.zeros([action_size] * num_agents))
+        
+    def select_action(self, state):
+        state_tuple = tuple(state)  # Convert state to tuple for dictionary key
+        
+        # Exploration-exploitation trade-off
+        if np.random.random() < self.epsilon:
+            # Random actions for all agents
+            actions = tuple(np.random.randint(0, self.action_size) for _ in range(self.num_agents))
+        else:
+            # Greedy action selection
+            # Use np.unravel_index with the shape based on num_agents
+            actions = np.unravel_index(
+                np.argmax(self.q_table[state_tuple]), 
+                [self.action_size] * self.num_agents
+            )   
+        
+        return actions
+        
+    def update(self, state, action, reward, next_state, done):
+        state_tuple = tuple(state)
+        next_state_tuple = tuple(next_state)
+        
+        # Index into the Q-table using the full joint action
+        # We need to convert action tuple to a tuple of ints for proper indexing
+        action_tuple = tuple(int(a) for a in action)
+        
+        # Current Q-value
+        current_q = self.q_table[state_tuple][action_tuple]
+        
+        # Next Q-value (maximum over all joint actions)
+        next_q = np.max(self.q_table[next_state_tuple]) if not done else 0
+        
+        # Q-value update
+        new_q = current_q + self.lr * (reward + self.gamma * next_q - current_q)
+        self.q_table[state_tuple][action_tuple] = new_q
+        
+        # Decay exploration rate
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+            
