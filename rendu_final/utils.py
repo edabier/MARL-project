@@ -251,7 +251,7 @@ def launch_visualization(agent, algo_type, num_agents=2, steps=100, delay=0.5, s
     # Construire la commande
     cmd = [
         sys.executable,
-        "run_visualization.py",
+        "run_policy.py",
         "--algo", algo_type,
         "--model", model_path,
         "--agents", str(num_agents),
@@ -278,7 +278,220 @@ def launch_visualization(agent, algo_type, num_agents=2, steps=100, delay=0.5, s
     except Exception as e:
         print(f"Erreur lors du lancement de la visualisation: {e}")
 
+def plot_results(agent,results,windows=200):
+    if isinstance(agent, IndependentQLearning):
+        plt.figure(figsize=(15, 5*agent.n_agents))
+
+        # Tracer les récompenses pour chaque agent
+    else:
+        plt.figure(figsize=(15, 5*agent.n_agents+1))
         
+    for i in range(agent.n_agents):
+        plt.subplot(agent.n_agents +isinstance(agent,AlternatingIQL), 1, i+1)
+
+        # Calculer les récompenses moyennes par fenêtre
+        rewards_rates = results['rewards_rates'][i]
+        rewards_rates_smoothed = []
+
+        for j in range(0, len(rewards_rates), windows):
+            if j + windows <= len(rewards_rates):
+                rewards_rates_smoothed.append(np.mean(rewards_rates[j:j+windows]))
+
+        plt.plot(range(0, len(rewards_rates_smoothed) * windows, windows), rewards_rates_smoothed)
+        plt.title(f"Agent {i+1} - Récompenses moyennes (moyenne sur {windows} épisodes)")
+        plt.xlabel("Épisodes")
+        plt.ylabel("Récompenses moyennes")
+
+    if not isinstance(agent, IndependentQLearning):
+        plt.subplot(agent.n_agents + 1, 1, agent.n_agents + 1)
+        
+        for i in range(agent.n_agents):
+            lr_rates = results['learning_rates'][i]
+            
+            # Sous-échantillonner pour éviter de tracer trop de points
+            sample_size = min(1000, len(lr_rates))
+            indices = np.linspace(0, len(lr_rates)-1, sample_size, dtype=int)
+            
+            plt.plot(indices, [lr_rates[j] for j in indices], label=f"Agent {i+1}")
+        
+        plt.title("Taux d'apprentissage des agents (alternance)")
+        plt.xlabel("Épisodes")
+        plt.ylabel("Taux d'apprentissage")
+        plt.legend()
+    plt.tight_layout()
+
+
+def visualize_policy_pygame_reusable(env, agent, max_steps=100, delay=0.5, screen_size=600, save_images=False):
+    """
+    Visualise la politique d'un agent avec pygame - version réutilisable
+    """
+    # Force reset Pygame
+    if pygame.get_init():
+        pygame.quit()
+    
+    pygame.init()
+    
+    # Réinitialiser l'environnement
+    state_tuple, _ = env.reset()
+    
+    # Créer un dossier pour sauvegarder les images si nécessaire
+    if save_images:
+        img_dir = f"visu/policy_visualization_{time.strftime('%Y%m%d_%H%M%S')}"
+        os.makedirs(img_dir, exist_ok=True)
+    
+    # Remplacer complètement l'initialisation pygame de l'environnement
+    env.pygame_initialized = True
+    env.screen = pygame.display.set_mode((screen_size, screen_size))
+    pygame.display.set_caption("Multi-Agent Frozen Lake")
+    env.cell_size = screen_size // max(env.grid_size[0], env.grid_size[1])
+    
+    # Charger les images si nécessaire
+    if not hasattr(env, 'images') or env.images is None:
+        # Load images
+        img_dir = "../img/"
+        env.images = {
+            'F': pygame.image.load(img_dir + "ice.png"),
+            'H': pygame.image.load(img_dir + "hole.png"),
+            'G': pygame.image.load(img_dir + "ice.png"),  # Use ice as background for goal
+            'S': pygame.image.load(img_dir + "stool.png")
+        }
+        
+        # Scale images to cell size
+        for key in env.images:
+            env.images[key] = pygame.transform.scale(env.images[key], (env.cell_size, env.cell_size))
+        
+        # Load goal sprite separately to overlay on ice
+        env.goal_sprite = pygame.image.load(img_dir + "goal.png")
+        env.goal_sprite = pygame.transform.scale(env.goal_sprite, (env.cell_size, env.cell_size))
+        
+        # Load agent images for different directions
+        env.agent_images = {
+            'up': pygame.image.load(img_dir + "elf_up.png"),
+            'down': pygame.image.load(img_dir + "elf_down.png"),
+            'left': pygame.image.load(img_dir + "elf_left.png"),
+            'right': pygame.image.load(img_dir + "elf_right.png")
+        }
+        
+        # Scale agent images
+        for key in env.agent_images:
+            env.agent_images[key] = pygame.transform.scale(env.agent_images[key], (env.cell_size, env.cell_size))
+    
+    # Initialize other attributes that might be needed
+    if not hasattr(env, 'font') or env.font is None:
+        env.font = pygame.font.Font(None, env.cell_size // 2)
+    
+    env.last_actions = [1] * env.num_agents  # Default: facing down
+    
+    # Statistiques pour l'épisode
+    total_reward = 0
+    step_count = 0
+    goals_reached = set()
+    
+    print(f"\n--- Début de la visualisation de la politique ---")
+    
+    # Rendre l'état initial
+    env.render_pygame(screen_size=screen_size)
+    if save_images:
+        pygame.image.save(env.screen, f"{img_dir}/step_{step_count:03d}.png")
+    
+    print(f"État initial")
+    
+    # Boucle principale
+    done = False
+    # Désactiver complètement l'exploration
+    if hasattr(agent, 'agents'):
+        for a in agent.agents:
+            a.epsilon = 0
+    else:
+        agent.epsilon = 0
+
+    for step in range(max_steps):
+        if all(env.agent_done):  # Si tous les agents ont terminé
+            break
+            
+        actions = []
+        for i in range(env.num_agents):
+            if env.agent_done[i]:
+                actions.append(0)  # Action factice pour les agents terminés
+            elif isinstance(agent, (IndependentQLearning, AlternatingIQL)):
+                # Obtenir l'action de l'agent pour l'état actuel
+                if isinstance(agent, (IndependentQLearning, AlternatingIQL)):
+                    # Pour IQL, chaque agent a sa propre table Q
+                    state = state_tuple[i]
+                    action = np.argmax(agent.agents[i].q_table[state])  # Strictement déterministe
+                    actions.append(action)
+                else:
+                    # Pour CQL utiliser la table Q centralisée
+                    joint_state = state_tuple
+                    action = agent.get_action(joint_state)[i]
+                    actions.append(action)
+            else:
+                # Pour les autres agents choisir l'action aléatoirement
+                actions.append(np.random.randint(0, 4))
+                print("random action")
+        
+        # Exécuter l'action
+        next_state_tuple, rewards, dones, truncated, info = env.step(actions)
+        
+        # Mettre à jour les statistiques
+        step_count += 1
+        reward = sum(rewards)
+        total_reward += reward
+        
+        # Vérifier les objectifs atteints
+        if 'goals_reached' in info:
+            current_goals = set(agent_id for agent_id, count in enumerate(info['goals_reached']) if count > 0)
+            new_goals = current_goals - goals_reached
+            if new_goals:
+                print(f"Étape {step_count}: Agents {new_goals} ont atteint un objectif!")
+            goals_reached = current_goals
+        
+        # Afficher les informations sur l'étape
+        action_names = ['GAUCHE', 'BAS', 'DROITE', 'HAUT']
+        print(f"Étape {step_count}: Actions={[action_names[a] for a in actions]}, "
+              f"Récompense={reward}, Total={total_reward}")
+        
+        if info.get('collisions', False):
+            print(f"⚠️ Collision entre les agents {info.get('collision_agents', [])}!")
+        
+        # Rendre l'état suivant
+        env.render_pygame(screen_size=screen_size)
+        if save_images:
+            pygame.image.save(env.screen, f"{img_dir}/step_{step_count:03d}.png")
+        
+        # Mettre à jour l'état
+        state_tuple = next_state_tuple
+        
+        # Attendre un peu pour que l'utilisateur puisse voir l'animation
+        time.sleep(delay)
+        
+        # Vérifier si l'épisode est terminé
+        if all(dones):
+            print("Tous les agents ont terminé!")
+            break
+    
+    print(f"\n--- Fin de la visualisation ---")
+    print(f"Total de {step_count} étapes")
+    print(f"Récompense totale: {total_reward}")
+    print(f"Objectifs atteints par les agents: {goals_reached}")
+    
+    # Attendre que l'utilisateur ferme la fenêtre pygame
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+                break
+    
+    # Si save_images est activé, informer l'utilisateur
+    if save_images:
+        print(f"\nImages sauvegardées dans le dossier: {img_dir}")
+    
+    # Nettoyer proprement Pygame
+    pygame.quit()
+    
+    # Assurer que l'attribut pygame_initialized est correctement mis à jour
+    env.pygame_initialized = False
 def run_simulation(agent, map_, num_agent, num_episodes=10000, silent=True):
     # Create environment
     env = FrozenLakeOneGoal(map_=map_, max_steps=100, num_agents=num_agent)

@@ -790,7 +790,7 @@ class FrozenLake4goals(gym.Env):
                 # Collision detected, mark with a special character
                 grid[pos] = "C"
             else:
-                grid[pos] = f"A{i+1}"
+                grid[pos] = f"{i+1}"
 
         print("\n".join(" ".join(row) for row in grid))
         print()

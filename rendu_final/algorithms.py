@@ -613,7 +613,7 @@ class AlternatingIQL:
                       f"Récompenses moyennes agents: {[f'{reward:.2f}' for reward in recent_rewards]}, "
                       f"Agent actif: {self.active_learner_idx}, "
                       f"Taux d'apprentissage: {[f'{self.agents[i].lr:.4f}' for i in range(self.n_agents)]}"
-                      f"Epsilon: {self.agents[0].epsilon:.3f}"
+                      f"\nEpsilon: {self.agents[0].epsilon:.3f} "
                       f"total _reward: {np.sum(recent_rewards):.4f}"
                       )
 
