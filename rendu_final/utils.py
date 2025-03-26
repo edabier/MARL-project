@@ -515,19 +515,44 @@ def visualize_policy_pygame_reusable(env, agent, max_steps=100, delay=0.5, scree
 
 def evaluate_policy(env, agent, max_steps=50, verbose=True):
     state_tuple, _ = env.reset()
-    
+    ##single agent part
+    done = False
+    step_count = 0
+    if isinstance(agent,QAgent):
+        agent_reward=0
+        if verbose:
+            print(f"\n--- Début de l'évaluation de la politique ---")
+        agent.epsilon=0
+        
+        for step in range(max_steps):
+            state = state_tuple
+            action = np.argmax(agent.q_table[state])  # Strictement déterministe
+            next_state_tuple, reward, done, truncated, info = env.step(action)
+            step_count += 1
+            agent_reward+=reward
+            if verbose:
+                action_names = ['GAUCHE', 'BAS', 'DROITE', 'HAUT']
+                print(f"Étape {step_count}: Action={[action_names[action]]}")
+                print(f"Récompenses à cette étape: {reward}")
+            state_tuple = next_state_tuple
+            if done:
+                break
+        return {
+        'agent_reward': agent_reward,
+        'steps': step_count
+    }
     # Suivre les récompenses individuelles de chaque agent
     agent_rewards = [0] * env.num_agents
     # Suivre quel objectif chaque agent a atteint (-1 = aucun)
     agent_goals = [-1] * env.num_agents
-    step_count = 0
+    
     collision_count = 0
     collision_steps = []
     
     if verbose:
         print(f"\n--- Début de l'évaluation de la politique ---")
     
-    done = False
+    
     # Désactiver complètement l'exploration
     if hasattr(agent, 'agents'):
         for a in agent.agents:
