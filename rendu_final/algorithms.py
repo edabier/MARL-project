@@ -56,7 +56,84 @@ class QAgent:
     def decay_epsilon(self):
         # Réduire epsilon progressivement pour favoriser l'exploitation au fil du temps
         self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
-
+    def train(self, env, episodes=1000, max_steps=100, verbose=False, verbose_interval=100):
+        """
+        Entraîne l'agent dans l'environnement donné.
+        
+        Args:
+            env: Environnement d'apprentissage (doit avoir des méthodes reset et step)
+            episodes: Nombre d'épisodes d'entraînement
+            max_steps: Nombre maximum d'étapes par épisode
+            verbose: Si True, affiche des informations sur l'entraînement
+            verbose_interval: Intervalle d'épisodes pour afficher les informations
+        
+        Returns:
+            dict: Statistiques d'entraînement (récompenses, étapes, etc.)
+        """
+        rewards_history = []
+        steps_history = []
+        success_history = []
+        
+        for episode in range(episodes):
+            # Réinitialiser l'environnement
+            state, _ = env.reset()
+            total_reward = 0
+            done = False
+            truncated = False
+            
+            for step in range(max_steps):
+                # Sélectionner une action
+                action = self.get_action(state)
+                
+                # Exécuter l'action
+                next_state, reward, done, truncated, _ = env.step(action)
+                
+                # Mettre à jour la table Q
+                self.update(state, action, reward, next_state, done)
+                
+                # Mettre à jour l'état et la récompense
+                state = next_state
+                total_reward += reward
+                
+                # Sortir de la boucle si l'épisode est terminé
+                if done or truncated:
+                    break
+            
+            # Réduire epsilon
+            self.decay_epsilon()
+            
+            # Enregistrer les statistiques
+            rewards_history.append(total_reward)
+            steps_history.append(step + 1)
+            success_history.append(total_reward > 0)  # Considérer une récompense positive comme un succès
+            
+            # Afficher les statistiques
+            if verbose and (episode + 1) % verbose_interval == 0:
+                recent_rewards = rewards_history[-verbose_interval:]
+                recent_success = success_history[-verbose_interval:]
+                avg_reward = sum(recent_rewards) / len(recent_rewards)
+                success_rate = sum(recent_success) / len(recent_success) * 100
+                
+                print(f"Épisode {episode + 1}/{episodes}, "
+                    f"Récompense moyenne: {avg_reward:.2f}, "
+                    f"Taux de succès: {success_rate:.1f}%, "
+                    f"Epsilon: {self.epsilon:.4f}")
+        
+        # Calculer les statistiques finales
+        overall_success_rate = sum(success_history) / len(success_history) * 100
+        
+        if verbose:
+            print(f"\nEntraînement terminé!")
+            print(f"Récompense moyenne: {sum(rewards_history) / len(rewards_history):.2f}")
+            print(f"Nombre moyen d'étapes: {sum(steps_history) / len(steps_history):.2f}")
+            print(f"Taux de succès global: {overall_success_rate:.1f}%")
+        
+        return {
+            'rewards': rewards_history,
+            'steps': steps_history,
+            'success_rate': overall_success_rate,
+            'final_epsilon': self.epsilon
+        }
 
 class IndependentQLearning:
     """
