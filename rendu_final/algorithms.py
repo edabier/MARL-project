@@ -146,7 +146,7 @@ class IndependentQLearning:
             # Réduire epsilon pour chaque agent
             for agent in self.agents:
                 agent.decay_epsilon()
-
+            
             # Afficher la progression
             if verbose and (episode + 1) % (episodes // 10) == 0:
                 # Calculer les récompenses moyennes sur les 100 derniers épisodes
@@ -155,10 +155,11 @@ class IndependentQLearning:
                     np.mean(rewards_rates[i][-min(window, len(rewards_rates[i])):])
                     for i in range(self.n_agents)
                 ]
-                
+                total_rewards=sum(recent_rewards)
                 print(f"Épisode {episode + 1}/{episodes}, "
                     f"Récompenses moyennes agents: {[f'{reward:.2f}' for reward in recent_rewards]}, "
-                    f"Epsilon: {self.agents[0].epsilon:.4f}")
+                    f"Epsilon: {self.agents[0].epsilon:.4f}",
+                    f"Récompense Total {total_rewards:.2f}")
 
         return {
             'rewards': rewards_history,
