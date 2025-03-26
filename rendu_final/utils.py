@@ -563,3 +563,87 @@ def run_simulation(agent, map_, num_agent, num_episodes=10000, silent=True):
     plt.show()
     
     return agent
+
+def visualizePolicyCommonGoal(env, agent, num_episodes=2, max_steps=20, use_pygame=True, num_agents=2):
+    """Visualize the learned policy"""
+    
+    # Action names for better visualization
+    action_names = {0: "LEFT", 1: "DOWN", 2: "RIGHT", 3: "UP"}
+    
+    try:
+        for i in range(num_episodes):
+            state, _ = env.reset()
+            done = False
+            truncated = False
+            total_reward = 0
+            steps = 0
+            
+            print(f"\n=== Test Episode {i+1} ===")
+            if use_pygame:
+                env.render_pygame()
+            else:
+                print("Initial state:")
+                env.render()
+            
+            while not done and not truncated and steps < max_steps:
+                # Use trained policy (no exploration)
+                state_tuple = tuple(state)
+                
+                # Get actions based on agent's Q-table
+                # This assumes agent.q_table is structured to handle num_agents
+                joint_actions = np.unravel_index(
+                    np.argmax(agent.q_table[state_tuple]),
+                    tuple([agent.action_size] * num_agents)
+                )
+                action = joint_actions
+                
+                # Take action
+                next_state, reward, done, truncated, _ = env.step(action)
+                
+                # Check for overlaps - this needs to be generalized for multiple agents
+                overlaps = []
+                for i in range(num_agents):
+                    for j in range(i+1, num_agents):
+                        # Compare positions of each pair of agents
+                        agent_i_pos = (next_state[i*2], next_state[i*2 + 1])
+                        agent_j_pos = (next_state[j*2], next_state[j*2 + 1])
+                        if agent_i_pos == agent_j_pos:
+                            overlaps.append((i, j))
+                
+                # Update state and reward
+                state = next_state
+                total_reward += reward
+                steps += 1
+                
+                # Render with action information
+                print(f"Step {steps}:")
+                for agent_idx in range(num_agents):
+                    print(f"Agent {agent_idx+1}: {action_names[action[agent_idx]]}")
+                print(f"Reward: {reward}")
+                
+                if overlaps:
+                    print("Overlaps detected between agents:", overlaps)
+                
+                if use_pygame:
+                    env.render_pygame()
+                    time.sleep(0.5)
+                else:
+                    env.render()
+                    time.sleep(0.5)
+            
+            print(f"Episode finished after {steps} steps with total reward: {total_reward}")
+            if done and total_reward > 0:
+                print("Success! At least one agent reached the goal.")
+            elif done and total_reward <= 0:
+                print("Failed. Agents fell into holes or couldn't reach the goal.")
+            else:
+                print("Truncated. Maximum steps reached.")
+            
+            # Short pause between episodes
+            time.sleep(1)
+        
+    finally:
+        env.close()
+        if pygame.get_init():
+            pygame.quit()
+
