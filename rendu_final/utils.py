@@ -492,6 +492,130 @@ def visualize_policy_pygame_reusable(env, agent, max_steps=100, delay=0.5, scree
     
     # Assurer que l'attribut pygame_initialized est correctement mis à jour
     env.pygame_initialized = False
+
+
+def evaluate_policy(env, agent, max_steps=50, verbose=True):
+    state_tuple, _ = env.reset()
+    
+    # Suivre les récompenses individuelles de chaque agent
+    agent_rewards = [0] * env.num_agents
+    # Suivre quel objectif chaque agent a atteint (-1 = aucun)
+    agent_goals = [-1] * env.num_agents
+    step_count = 0
+    collision_count = 0
+    collision_steps = []
+    
+    if verbose:
+        print(f"\n--- Début de l'évaluation de la politique ---")
+    
+    done = False
+    # Désactiver complètement l'exploration
+    if hasattr(agent, 'agents'):
+        for a in agent.agents:
+            a.epsilon = 0
+    else:
+        agent.epsilon = 0
+
+    for step in range(max_steps):
+        if all(env.agent_done):  # Si tous les agents ont terminé
+            break
+            
+        actions = []
+        for i in range(env.num_agents):
+            if env.agent_done[i]:
+                actions.append(0)  # Action factice pour les agents terminés
+            elif isinstance(agent, (IndependentQLearning, AlternatingIQL)):
+                # Obtenir l'action de l'agent pour l'état actuel
+                if isinstance(agent, (IndependentQLearning, AlternatingIQL)):
+                    # Pour IQL, chaque agent a sa propre table Q
+                    state = state_tuple[i]
+                    action = np.argmax(agent.agents[i].q_table[state])  # Strictement déterministe
+                    actions.append(action)
+                else:
+                    # Pour CQL utiliser la table Q centralisée
+                    joint_state = state_tuple
+                    action = agent.get_action(joint_state)[i]
+                    actions.append(action)
+            else:
+                # Pour les autres agents choisir l'action aléatoirement
+                actions.append(np.random.randint(0, 4))
+                if verbose:
+                    print("random action")
+        
+        # Exécuter l'action
+        next_state_tuple, rewards, dones, truncated, info = env.step(actions)
+        
+        # Mettre à jour les statistiques
+        step_count += 1
+        
+        # Stocker les récompenses individuelles
+        for i in range(env.num_agents):
+            agent_rewards[i] += rewards[i]
+        
+        # Vérifier quel agent a atteint quel objectif
+        if hasattr(env, 'goal_positions') and hasattr(env, 'agent_positions'):
+            # Vérifier chaque agent
+            for i in range(env.num_agents):
+                if env.agent_done[i] and agent_goals[i] == -1:
+                    # L'agent a terminé mais nous n'avons pas encore enregistré son objectif
+                    position = tuple(env.agent_positions[i])
+                    
+                    # Recherche de l'objectif atteint
+                    for goal_idx, goal_pos in enumerate(env.goal_positions):
+                        if position == goal_pos:
+                            agent_goals[i] = goal_idx
+                            if verbose:
+                                print(f"Étape {step_count}: Agent {i} a atteint l'objectif {goal_idx}!")
+                            break
+        
+        # Suivi des collisions
+        if info.get('collisions', False):
+            collision_count += 1
+            collision_steps.append(step_count)
+            if verbose:
+                print(f"⚠️ Collision entre les agents {info.get('collision_agents', [])}!")
+        
+        # Afficher les informations sur l'étape
+        if verbose:
+            action_names = ['GAUCHE', 'BAS', 'DROITE', 'HAUT']
+            print(f"Étape {step_count}: Actions={[action_names[a] for a in actions]}")
+            print(f"Récompenses à cette étape: {rewards}")
+        
+        # Mettre à jour l'état
+        state_tuple = next_state_tuple
+        
+        # Vérifier si l'épisode est terminé
+        if all(dones):
+            if verbose:
+                print("Tous les agents ont terminé!")
+            break
+    
+    # Affichage du résumé
+    if verbose:
+        print(f"\n--- Fin de l'évaluation ---")
+        print(f"Total de {step_count} étapes")
+        
+        # Afficher les récompenses individuelles finales
+        for i in range(env.num_agents):
+            goal_str = f"Objectif {agent_goals[i]}" if agent_goals[i] >= 0 else "Aucun objectif"
+            print(f"Agent {i}: Récompense = {agent_rewards[i]:.2f}, {goal_str}")
+        
+        print(f"Récompense totale: {sum(agent_rewards):.2f}")
+        print(f"Nombre de collisions: {collision_count}")
+        if collision_count > 0:
+            print(f"Collisions aux étapes: {collision_steps}")
+    
+    # Retourner les statistiques pour une utilisation ultérieure
+    return {
+        'agent_rewards': agent_rewards,
+        'agent_goals': agent_goals,
+        'total_reward': sum(agent_rewards),
+        'steps': step_count,
+        'success': sum(1 for g in agent_goals if g >= 0),  # Nombre d'agents ayant atteint un objectif
+        'collision_count': collision_count,
+        'collision_steps': collision_steps
+    }
+
 def run_simulation(agent, map_, num_agent, num_episodes=10000, silent=True):
     # Create environment
     env = FrozenLakeOneGoal(map_=map_, max_steps=100, num_agents=num_agent)
