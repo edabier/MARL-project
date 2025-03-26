@@ -6,7 +6,7 @@ from environments import MAPS, FrozenLakeOneGoal, createMap
 import matplotlib.pyplot as plt
 import pygame
 import time
-from algorithms import IndependentQLearning,AlternatingIQL
+from algorithms import IndependentQLearning,AlternatingIQL,QAgent
 
 def save_agent(agent, agent_type, env_info=None, save_dir="saved_agents"):
     """
@@ -279,7 +279,26 @@ def launch_visualization(agent, algo_type, num_agents=2, steps=100, delay=0.5, s
         print(f"Erreur lors du lancement de la visualisation: {e}")
 
 def plot_results(agent,results,windows=200):
-    if isinstance(agent, IndependentQLearning):
+    if isinstance(agent, QAgent):
+        plt.figure(figsize=(15, 5))
+        
+        # Utiliser la clé 'rewards' comme indiqué dans votre fonction train
+        rewards = results['rewards']
+        rewards_smoothed = []
+        
+        # Calculer les moyennes glissantes
+        for j in range(0, len(rewards), windows):
+            if j + windows <= len(rewards):
+                rewards_smoothed.append(np.mean(rewards[j:j+windows]))
+        
+        # Tracer la courbe lissée
+        plt.plot(range(0, len(rewards_smoothed) * windows, windows), rewards_smoothed)
+        plt.title(f"Récompenses moyennes (moyenne sur {windows} épisodes)")
+        plt.xlabel("Épisodes")
+        plt.ylabel("Récompenses moyennes")
+        plt.show()
+        return
+    elif isinstance(agent, IndependentQLearning):
         plt.figure(figsize=(15, 5*agent.n_agents))
 
         # Tracer les récompenses pour chaque agent
