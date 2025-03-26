@@ -9,7 +9,7 @@ import pygame
 from collections import defaultdict
 import os
 import colorsys
-import tqdm
+from tqdm import tqdm
 
 
 class QAgent:
