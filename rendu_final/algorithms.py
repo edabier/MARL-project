@@ -718,7 +718,7 @@ class RandomPolicy:
         action2 = np.random.randint(0, self.action_size)
         return (action1, action2)
     
-class SingleGoalCentralQLearning:
+class CentralQLearningCommonGoal:
     
     '''
     This class defines the central Q learning algorithm
