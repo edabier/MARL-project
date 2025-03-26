@@ -135,7 +135,7 @@ def createMap(num_agent, size, map_name=None, seed=None):
     # Convert to list of strings
     return ["".join(row) for row in grid]
 
-class FrozenLakeOneGoal(gym.Env):
+class FrozenLakeCommonGoal(gym.Env):
     def __init__(self, map_, max_steps=100, num_agents=2):
         # Load the map
         self.desc = np.asarray(map_, dtype='c')

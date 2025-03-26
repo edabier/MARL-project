@@ -616,7 +616,7 @@ def evaluate_policy(env, agent, max_steps=50, verbose=True):
         'collision_steps': collision_steps
     }
 
-def run_simulation(agent, map_, num_agent, num_episodes=10000, silent=True):
+def runSimulationCommonGoal(agent, map_, num_agent, num_episodes=10000, silent=True):
     # Create environment
     env = FrozenLakeOneGoal(map_=map_, max_steps=100, num_agents=num_agent)
     
