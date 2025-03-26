@@ -4,6 +4,9 @@ import datetime
 import numpy as np
 from environments import MAPS, FrozenLakeOneGoal, createMap
 import matplotlib.pyplot as plt
+import pygame
+import time
+from algorithms import IndependentQLearning,AlternatingIQL
 
 def save_agent(agent, agent_type, env_info=None, save_dir="saved_agents"):
     """
@@ -86,6 +89,196 @@ def list_saved_agents(save_dir="saved_agents"):
     
     return [os.path.join(save_dir, f) for f in agent_files]
 
+def visualize_policy_pygame(env, agent, max_steps=100, delay=0.5, screen_size=600, save_images=False):
+    """
+    Visualise la politique d'un agent avec pygame
+    
+    Parameters:
+    ----------
+    env : l'environnement FrozenLake4goals
+    agent : l'algorithme d'apprentissage (IQL, CQL, etc.)
+    agent_idx : l'indice de l'agent à visualiser (pour IQL)
+    max_steps : nombre maximum d'étapes par épisode
+    delay : délai entre chaque étape (en secondes)
+    screen_size : taille de la fenêtre pygame
+    save_images : sauvegarder les images de chaque étape
+    """
+    # Réinitialiser l'environnement
+    state_tuple, _ = env.reset()
+    
+    # Créer un dossier pour sauvegarder les images si nécessaire
+    if save_images:
+        img_dir = f"visu/policy_visualization_{time.strftime('%Y%m%d_%H%M%S')}"
+        os.makedirs(img_dir, exist_ok=True)
+    
+    # Initialiser pygame si nécessaire
+    pygame.init()
+    
+    # Statistiques pour l'épisode
+    total_reward = 0
+    step_count = 0
+    goals_reached = set()
+    
+    print(f"\n--- Début de la visualisation de la politique ---")
+    
+    # Rendre l'état initial
+    env.render_pygame(screen_size=screen_size)
+    if save_images:
+        pygame.image.save(env.screen, f"{img_dir}/step_{step_count:03d}.png")
+    
+    print(f"État initial")
+    
+    # Boucle principale
+    done = False
+    # Désactiver complètement l'exploration
+    if hasattr(agent, 'agents'):
+        for a in agent.agents:
+            a.epsilon = 0
+    else:
+        agent.epsilon = 0
+
+    for step in range(max_steps):
+        if all(env.agent_done):  # Si tous les agents ont terminé
+            break
+            
+        actions = []
+        for i in range(env.num_agents):
+            if env.agent_done[i]:
+                actions.append(0)  # Action factice pour les agents terminés
+            elif isinstance(agent, (IndependentQLearning, AlternatingIQL)):
+                # Obtenir l'action de l'agent pour l'état actuel
+                if isinstance(agent, (IndependentQLearning, AlternatingIQL)):
+                    # Pour IQL, chaque agent a sa propre table Q
+                    state = state_tuple[i]
+                    action = np.argmax(agent.agents[i].q_table[state])  # Strictement déterministe
+                    actions.append(action)
+                else:
+                    # Pour CQL  utiliser la table Q centralisée
+                    joint_state = state_tuple
+                    action = agent.get_action(joint_state)[i]
+                    actions.append(action)
+            else:
+                # Pour les autres agents  choisir l'action aléatoirement
+                actions.append(np.random.randint(0, 4))
+                print("random action")
+        
+        # Exécuter l'action
+        next_state_tuple, rewards, dones, truncated, info = env.step(actions)
+        
+        # Mettre à jour les statistiques
+        step_count += 1
+        reward = sum(rewards)
+        total_reward += reward
+        
+        # Vérifier les objectifs atteints
+        if 'goals_reached' in info:
+            current_goals = set(agent_id for agent_id, count in enumerate(info['goals_reached']) if count > 0)
+            new_goals = current_goals - goals_reached
+            if new_goals:
+                print(f"Étape {step_count}: Agents {new_goals} ont atteint un objectif!")
+            goals_reached = current_goals
+        
+        # Afficher les informations sur l'étape
+        action_names = ['GAUCHE', 'BAS', 'DROITE', 'HAUT']
+        print(f"Étape {step_count}: Actions={[action_names[a] for a in actions]}, "
+              f"Récompense={reward}, Total={total_reward}")
+        
+        if info.get('collisions', False):
+            print(f"⚠️ Collision entre les agents {info.get('collision_agents', [])}!")
+        
+        # Rendre l'état suivant
+        env.render_pygame(screen_size=screen_size)
+        if save_images:
+            pygame.image.save(env.screen, f"{img_dir}/step_{step_count:03d}.png")
+        
+        # Mettre à jour l'état
+        state_tuple = next_state_tuple
+        
+        # Attendre un peu pour que l'utilisateur puisse voir l'animation
+        time.sleep(delay)
+        
+        # Vérifier si l'épisode est terminé
+        if all(dones):
+            print("Tous les agents ont terminé!")
+            break
+    
+    print(f"\n--- Fin de la visualisation ---")
+    print(f"Total de {step_count} étapes")
+    print(f"Récompense totale: {total_reward}")
+    print(f"Objectifs atteints par les agents: {goals_reached}")
+    
+    # Attendre que l'utilisateur ferme la fenêtre pygame
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+    
+    # Si save_images est activé, informer l'utilisateur
+    if save_images:
+        print(f"\nImages sauvegardées dans le dossier: {img_dir}")
+    
+    pygame.quit()
+
+
+def launch_visualization(agent, algo_type, num_agents=2, steps=100, delay=0.5, save_images=False):
+    """
+    Lance la visualisation dans un terminal séparé
+    
+    Parameters:
+    ----------
+    agent : l'agent entraîné
+    algo_type : type d'algorithme ('iql', 'cql', 'alt_iql')
+    num_agents : nombre d'agents
+    steps : nombre maximum d'étapes
+    delay : délai entre les étapes
+    save_images : sauvegarder les images de chaque étape
+    """
+    import os
+    import subprocess
+    import sys
+    import pickle
+    import tempfile
+    
+    # Créer un fichier temporaire pour sauvegarder l'agent
+    temp_dir = tempfile.gettempdir()
+    model_path = os.path.join(temp_dir, f"temp_agent_{algo_type}.pkl")
+    
+    # Sauvegarder l'agent
+    with open(model_path, 'wb') as f:
+        pickle.dump(agent, f)
+    
+    # Construire la commande
+    cmd = [
+        sys.executable,
+        "run_visualization.py",
+        "--algo", algo_type,
+        "--model", model_path,
+        "--agents", str(num_agents),
+        "--steps", str(steps),
+        "--delay", str(delay)
+    ]
+    
+    if save_images:
+        cmd.append("--save")
+    
+    # Lancer le processus selon le système d'exploitation
+    try:
+        if os.name == 'nt':  # Windows
+            subprocess.Popen(["start", "cmd", "/k"] + [" ".join(cmd)], shell=True)
+        elif sys.platform == 'darwin':  # MacOS
+            cmd_str = " ".join(cmd)
+            subprocess.Popen(["open", "-a", "Terminal", cmd_str], shell=True)
+        else:  # Linux
+            cmd_str = " ".join(cmd)
+            subprocess.Popen(["gnome-terminal", "--", "bash", "-c", f"{cmd_str}; exec bash"], shell=False)
+        
+        print(f"Visualisation de l'agent {algo_type} lancée dans un terminal séparé.")
+        print(f"L'agent a été temporairement sauvegardé à: {model_path}")
+    except Exception as e:
+        print(f"Erreur lors du lancement de la visualisation: {e}")
+
+        
 def run_simulation(agent, map_, num_agent, num_episodes=10000, silent=True):
     # Create environment
     env = FrozenLakeOneGoal(map_=map_, max_steps=100, num_agents=num_agent)
