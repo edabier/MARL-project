@@ -220,7 +220,6 @@ def visualize_policy_pygame(env, agent, max_steps=100, delay=0.5, screen_size=60
     
     pygame.quit()
 
-
 def launch_visualization(agent, algo_type, num_agents=2, steps=100, delay=0.5, save_images=False):
     """
     Lance la visualisation dans un terminal séparé
@@ -338,7 +337,6 @@ def plot_results(agent,results,windows=200):
         plt.ylabel("Taux d'apprentissage")
         plt.legend()
     plt.tight_layout()
-
 
 def visualize_policy_pygame_reusable(env, agent, max_steps=100, delay=0.5, screen_size=600, save_images=False):
     """
@@ -511,7 +509,6 @@ def visualize_policy_pygame_reusable(env, agent, max_steps=100, delay=0.5, scree
     
     # Assurer que l'attribut pygame_initialized est correctement mis à jour
     env.pygame_initialized = False
-
 
 def evaluate_policy(env, agent, max_steps=50, verbose=True):
     state_tuple, _ = env.reset()
