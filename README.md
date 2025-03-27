@@ -1,7 +1,7 @@
 # Multi Agent Reinforcement Learning Project:
 #### By Adam Lagssaibi, Edgard Dabier and Nolan Sisouphanthong
 
-In this repository, we explore various RL methods (**single agent** algorithms to learn the best policy, as well as more complex **multi agents** algorithms)
+In this repository, we explore various RL methods (**single agent** algorithms to learn the best policy, as well as more complex **multi agents** algorithms), using custom versions of OpenAi's [ **FrozenLake** environment](https://github.com/openai/gym/tree/master/gym/envs).
 
 The most important files are located in the `main-code` folder and are split into 4 files:
 
